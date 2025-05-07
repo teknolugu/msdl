@@ -1,7 +1,3 @@
-const msApiUrl = "https://www.microsoft.com/software-download-connector/api/"
-const parms = "?profile=606624d44113&Locale=en-US&sessionID="
-const sessionUrl = "https://vlscppe.microsoft.com/fp/tags?org_id=y6jn8c31&session_id="
-
 const apiUrl = "https://api.gravesoft.dev/msdl/"
 
 const sessionId = document.getElementById('msdl-session-id');
@@ -12,11 +8,7 @@ const processingError = document.getElementById('msdl-processing-error');
 const productsList = document.getElementById('products-list');
 const backToProductsDiv = document.getElementById('back-to-products');
 
-const sharedSessionGUID = "47cbc254-4a79-4be6-9866-9c625eb20911";
-
 let availableProducts = {};
-let sharedSession = false;
-let shouldUseSharedSession = true;
 let skuId;
 
 function uuidv4() {
@@ -102,93 +94,33 @@ function onLanguageXhrChange() {
 }
 
 function onDownloadsXhrChange() {
-    if (!(this.status == 200)) return;
-
-    let response = JSON.parse(this.responseText)
-
-    let wasSuccessful = true;
-    if (response.Errors || response.ValidationContainer.Errors) {
+    if (!(this.status == 200)) {
         processingError.style.display = "block";
-        wasSuccessful = false;
+        return;
     }
+
+    let response = JSON.parse(this.responseText);
 
     if (pleaseWait.style.display != "block") return;
 
-    if (wasSuccessful) {
-        pleaseWait.style.display = "none";
-    } else if (!sharedSession && shouldUseSharedSession) {
-        useSharedSession();
-        return;
-    } else {
-        getFromServer();
-        return;
-    }
-
-    msContent.innerHTML = "";
-    msContent.style.display = "block";
-
-    if (response.ProductDownloadOptions && response.ProductDownloadOptions.length > 0) {
-        response.ProductDownloadOptions.forEach(option => {
-            let optionContainer = document.createElement('div');
-
-            let header = document.createElement('h1');
-            header.textContent = `Windows 11 ${option.LocalizedLanguage}`
-
-            let downloadButton = document.createElement('a');
-            downloadButton.href = option.Uri;
-            downloadButton.textContent = `Download ${option.LocalizedProductDisplayName}`;
-            downloadButton.target = "_blank";
-            optionContainer.appendChild(downloadButton);
-
-            msContent.appendChild(optionContainer);
-        });
-    } else {
-        msContent.innerHTML = "<p>No download options available.</p>";
-    }
-}
-
-function getFromServer() {
-    processingError.style.display = "none";
-    let url = apiUrl + "proxy" + "?product_id=" + window.location.hash.substring(1) +
-        "&sku_id=" + skuId;
-    let xhr = new XMLHttpRequest();
-    xhr.onload = displayResponseFromServer;
-    xhr.open("GET", url, true);
-    xhr.send();
-}
-
-function getFileNameFromLink(link) {
-    let raw_link = link.split('?')[0];
-    return raw_link.split('/').pop();
-}
-
-function displayResponseFromServer() {
     pleaseWait.style.display = "none";
-
-    const response = JSON.parse(this.responseText);
-
-    if (this.status !== 200) {
-        processingError.style.display = "block";
-        alert(response["Error"])
-        return;
-    }
-
-    msContent.innerHTML = "";
     msContent.style.display = "block";
+    msContent.innerHTML = "";
 
     if (response.ProductDownloadOptions && response.ProductDownloadOptions.length > 0) {
         let header = document.createElement('h2');
         header.textContent = `${response.ProductDownloadOptions[0].ProductDisplayName} ${response.ProductDownloadOptions[0].LocalizedLanguage}`
         msContent.appendChild(header);
-            
+
         response.ProductDownloadOptions.forEach(option => {
             let downloadButton = document.createElement('a');
             downloadButton.href = option.Uri;
-            downloadButton.textContent = getFileNameFromLink(option.Uri);
+            let raw_link = option.Uri.split('?')[0];
+            downloadButton.textContent = raw_link.split('/').pop();;
             downloadButton.target = "_blank";
-    
+
             let br = document.createElement('br');
-    
+
             msContent.appendChild(downloadButton);
             msContent.appendChild(br);
         });
@@ -198,7 +130,7 @@ function displayResponseFromServer() {
 }
 
 function getLanguages(productId) {
-    let url = `${msApiUrl}getskuinformationbyproductedition${parms}${sessionId.value}&ProductEditionId=${productId}`;
+    let url = `${apiUrl}skuinfo?product_id=${productId}`;
     let xhr = new XMLHttpRequest();
     xhr.onload = onLanguageXhrChange;
     xhr.open("GET", url, true);
@@ -211,7 +143,7 @@ function getDownload() {
 
     skuId = skuId ? skuId : updateVars();
 
-    let url = `${msApiUrl}GetProductDownloadLinksBySku${parms}${sessionId.value}&SKU=${skuId}`;
+    let url = apiUrl + "proxy" + "?product_id=" + window.location.hash.substring(1) + "&sku_id=" + skuId;
 
     let xhr = new XMLHttpRequest();
     xhr.onload = onDownloadsXhrChange;
@@ -230,31 +162,12 @@ function backToProducts() {
     skuId = null;
 }
 
-function useSharedSession() {
-    sharedSession = true;
-    retryDownload();
-}
-
-function retryDownload() {
-    pleaseWait.style.display = "block";
-    processingError.style.display = 'none';
-    let productId = window.location.hash.substring(1);
-    let url = `${msApiUrl}getskuinformationbyproductedition${parms}${sharedSessionGUID}&ProductEditionId=${productId}`;
-    let xhr = new XMLHttpRequest();
-    xhr.onload = getDownload;
-    xhr.open("GET", url);
-    xhr.send();
-}
-
 function prepareDownload(id) {
     productsList.style.display = 'none';
     backToProductsDiv.style.display = 'block';
     pleaseWait.style.display = "block";
 
-    const xhr = new XMLHttpRequest();
-    xhr.onerror = () => { getLanguages(id) };
-    xhr.open("GET", sessionUrl + sessionId.value, true);
-    xhr.send();
+    getLanguages(id);
 }
 
 function addTableElement(table, value, data) {
@@ -338,13 +251,3 @@ xhr.open("GET", 'data/products.json', true);
 xhr.send();
 
 pleaseWait.style.display = 'block';
-
-let mxhr = new XMLHttpRequest();
-
-mxhr.onload = function () {
-    if (this.status != 200) {
-        shouldUseSharedSession = false;
-    }
-};
-mxhr.open("GET", apiUrl + "use_shared_session", true);
-mxhr.send();
